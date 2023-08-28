@@ -7,7 +7,7 @@ using ServiceKeeper.Core.MQEventHandlers;
 using StackExchange.Redis;
 using System.Reflection;
 
-namespace ServiceKeeper.Core.DI
+namespace ServiceKeeper.Core.DependencyInjection
 {
     public static class ServiceCollectionExtensions
     {

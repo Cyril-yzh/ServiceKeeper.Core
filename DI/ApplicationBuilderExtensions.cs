@@ -5,7 +5,7 @@ using ServiceKeeper.Core.EventBus.EventHandler;
 using ServiceKeeper.Core.MQEventHandlers;
 using ServiceKeeper.Core.PendingHandlerMediatREvents;
 
-namespace ServiceKeeper.Core.DI
+namespace ServiceKeeper.Core.DependencyInjection
 {
     public static class ApplicationBuilderExtensions
     {
