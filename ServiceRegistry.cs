@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using MediatR;
 using StackExchange.Redis;
 using ServiceKeeper.Core.PendingHandlerMediatREvents;
-using Newtonsoft.Json;
+using System.Text.Json;
 
 namespace ServiceKeeper.Core
 {
@@ -109,7 +109,7 @@ namespace ServiceKeeper.Core
                     if (redis.IsConnected)
                     {
                         if (!redis.GetDatabase(DbNumber).KeyExpire(CurrentOptions.RedisKey, CurrentOptions.ExpiryTime))// 保持 Service 键的存活时间
-                            await redis.GetDatabase(DbNumber).StringSetAsync(CurrentOptions.RedisKey, JsonConvert.SerializeObject(CurrentOptions), CurrentOptions.ExpiryTime);
+                            await redis.GetDatabase(DbNumber).StringSetAsync(CurrentOptions.RedisKey, JsonSerializer.Serialize(CurrentOptions), CurrentOptions.ExpiryTime);
                     }
                     else
                     {
@@ -142,7 +142,7 @@ namespace ServiceKeeper.Core
                     while (await keys.MoveNextAsync())
                     {
                         var value = await db.StringGetAsync(keys.Current);
-                        ServiceMetadata? options = JsonConvert.DeserializeObject<ServiceMetadata>(value.ToString());
+                        ServiceMetadata? options = JsonSerializer.Deserialize<ServiceMetadata>(value.ToString());
                         if (options == null) continue;
                         if (!Registry.ContainsKey(keys.Current.ToString()) || !Registry[keys.Current.ToString()].Equals(options))
                         {
@@ -167,7 +167,7 @@ namespace ServiceKeeper.Core
                     while (await keys.MoveNextAsync())
                     {
                         var value = await db.StringGetAsync(keys.Current);
-                        ServiceMetadata? options = JsonConvert.DeserializeObject<ServiceMetadata>(value.ToString());
+                        ServiceMetadata? options =JsonSerializer.Deserialize<ServiceMetadata>(value.ToString());
                         if (options != null) Registry.Add(keys.Current.ToString(), options);
                     }
                     _ = mediator.Publish(new RegistryUpdatedEvent());

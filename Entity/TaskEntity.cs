@@ -1,5 +1,5 @@
-﻿using Newtonsoft.Json;
-using System.ComponentModel.DataAnnotations.Schema;
+﻿using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json;
 
 namespace ServiceKeeper.Core.Entity
 {
@@ -30,7 +30,7 @@ namespace ServiceKeeper.Core.Entity
             get
             {
                 if (detail != null) return detail;
-                return detail = JsonConvert.DeserializeObject<TaskDetail>(TaskJson) ?? throw new Exception("无法将ValueJson反序列化为TaskDetail");
+                return detail = JsonSerializer.Deserialize<TaskDetail>(TaskJson) ?? throw new Exception("无法将ValueJson反序列化为TaskDetail");
             }
             //set => this.detail = value;
         }
@@ -44,7 +44,7 @@ namespace ServiceKeeper.Core.Entity
             {
                 if (trigger != null) return trigger;
                 if (!IsFirstNode) return null;
-                return trigger = JsonConvert.DeserializeObject<TaskTrigger>(TriggerJson!) ?? throw new Exception("无法将TriggerJson反序列化为TaskTrigger");
+                return trigger = JsonSerializer.Deserialize<TaskTrigger>(TriggerJson!) ?? throw new Exception("无法将TriggerJson反序列化为TaskTrigger");
             }
             //set => this.trigger = value;
         }
