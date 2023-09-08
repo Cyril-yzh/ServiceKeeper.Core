@@ -12,16 +12,19 @@ namespace ServiceKeeper.Core.Entity
         /// Task的唯一Id
         /// </summary>
         public Guid Id { get; init; }
-        public bool IsFirstNode { get; init; }
+        /// <summary>
+        /// 发送至处理服务的Key
+        /// </summary>
+        public string PublishKey { get; private set; } = null!;
+        public bool IsFirstNode { get; private set; }
         /// <summary>
         /// 将任务详细信息存储为 JSON 字符串
         /// </summary>
-        public string TaskJson { get; init; } = "";
+        public string TaskJson { get; private set; } = null!;
         /// <summary>
         /// 将任务触发器存储为 JSON 字符串
         /// </summary>
-        public string? TriggerJson { get; init; }
-
+        public string? TriggerJson { get; private set; }
         [NotMapped]
         private TaskDetail? detail;
         [NotMapped] // 该属性不会映射到数据库
@@ -30,7 +33,8 @@ namespace ServiceKeeper.Core.Entity
             get
             {
                 if (detail != null) return detail;
-                return detail = JsonSerializer.Deserialize<TaskDetail>(TaskJson) ?? throw new Exception("无法将ValueJson反序列化为TaskDetail");
+                TaskDetail result = JsonSerializer.Deserialize<TaskDetail>(TaskJson) ?? throw new Exception("无法将ValueJson反序列化为TaskDetail");
+                return detail = result;
             }
             //set => this.detail = value;
         }
@@ -42,9 +46,19 @@ namespace ServiceKeeper.Core.Entity
         {
             get
             {
-                if (trigger != null) return trigger;
-                if (!IsFirstNode) return null;
-                return trigger = JsonSerializer.Deserialize<TaskTrigger>(TriggerJson!) ?? throw new Exception("无法将TriggerJson反序列化为TaskTrigger");
+                try
+                {
+                    if (trigger != null) return trigger;
+                    if (!IsFirstNode) return null;
+                    trigger = JsonSerializer.Deserialize<TaskTrigger>(TriggerJson!) ?? throw new Exception("无法将TriggerJson反序列化为TaskTrigger");
+                    return trigger;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.Message);
+                    throw;
+                }
+
             }
             //set => this.trigger = value;
         }

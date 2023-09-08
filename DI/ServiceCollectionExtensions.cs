@@ -21,12 +21,12 @@ namespace ServiceKeeper.Core.DependencyInjection
             AddServiceRegistry(services);
             services.AddSingleton<ProducerReceiveReplyEventHandler>();
             // Producer 特有的 注册任务 Scheduler
-            services.AddSingleton<ServiceTaskScheduler>(sp =>
+            services.AddSingleton<ServiceScheduler>(sp =>
             {
                 var registry = sp.GetRequiredService<ServiceRegistry>();
                 var eventBus = sp.GetRequiredService<IEventBus>();
                 var mediator = sp.GetRequiredService<IMediator>();
-                return new ServiceTaskScheduler(mediator, eventBus, registry);
+                return new ServiceScheduler(mediator, eventBus, registry);
             });
 
             return services;
@@ -97,13 +97,13 @@ namespace ServiceKeeper.Core.DependencyInjection
                 var optionService = sp.GetRequiredService<IOptions<ServiceOptions>>().Value;
                 var factory = new ConnectionFactory()
                 {
-                    HostName = System.Net.Dns.GetHostName(),
+                    HostName = optionService.MQHostName,
                     DispatchConsumersAsync = true,
                     UserName = optionService.MQUserName,
                     Password = optionService.MQPassword
                 };
                 RabbitMQConnection mqConnection = new(factory);
-                return new RabbitMQEventBus(mqConnection, sp, optionService.MQExchangeName, optionService.MQQueueName);
+                return new RabbitMQEventBus(mqConnection, sp, optionService.MQExchangeName);
             });
             return services;
         }

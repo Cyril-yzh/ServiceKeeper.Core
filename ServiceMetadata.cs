@@ -1,4 +1,5 @@
 ﻿using ReflectionSerializer;
+using System.Text.Json.Serialization;
 
 namespace ServiceKeeper.Core
 {
@@ -25,6 +26,20 @@ namespace ServiceKeeper.Core
                 JsonGenerator jsonGenerator = new();
                 ReflectionJson = jsonGenerator.GenerateJson(receiverTaskType);
             }
+        }
+        [JsonConstructor]
+        public ServiceMetadata(string description, ServiceRole serviceRole, string assemblyName, string hostName, string redisKey, ServiceStatus serviceStatus, TimeSpan expiryTime, TimeSpan renewTime, string electionKey, string reflectionJson)
+        {
+            Description = description;
+            ServiceRole = serviceRole;
+            AssemblyName = assemblyName;
+            HostName = hostName;
+            RedisKey = redisKey;
+            ServiceStatus = serviceStatus;
+            ExpiryTime = expiryTime;
+            RenewTime = renewTime;
+            ElectionKey = electionKey;
+            ReflectionJson = reflectionJson;
         }
         private readonly static object statusLock = new();
         private ServiceStatus serviceStatus;
@@ -82,6 +97,7 @@ namespace ServiceKeeper.Core
         /// 相同Id竞选主服务使用的Key
         /// </summary>
         public string ElectionKey { get; init; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         /// <summary>
         /// 通过反射获取的Json
         /// </summary>

@@ -3,6 +3,7 @@ using Timer = System.Threading.Timer;
 using MediatR;
 using ServiceKeeper.Core.Entity;
 using ServiceKeeper.Core.MediatREventHandlers;
+using System.Data;
 
 namespace ServiceKeeper.Core
 {
@@ -10,13 +11,13 @@ namespace ServiceKeeper.Core
     /// 任务调度器
     /// 会将指定的任务根据指定的规则发送到对应的服务
     /// </summary>
-    public class ServiceTaskScheduler
+    public class ServiceScheduler
     {
         //保存的计时器
         static readonly Dictionary<Guid, Timer> timers = new();
         static readonly Dictionary<Guid, string> lastTimes = new();
         //所有不需要计时器的派生任务
-        static readonly Dictionary<Guid, TaskDetail> untriggerTask = new();
+        static readonly Dictionary<Guid, TaskEntity> untriggerTask = new();
 
         private readonly IMediator mediator;
         private readonly IEventBus eventBus;
@@ -53,7 +54,7 @@ namespace ServiceKeeper.Core
             get { lock (registeredTaskLocker) return _registeredTaskCount; }
             set { lock (registeredTaskLocker) _registeredTaskCount = value; }
         }
-        public ServiceTaskScheduler(IMediator mediator, IEventBus eventBus, ServiceRegistry serviceRegistry)
+        public ServiceScheduler(IMediator mediator, IEventBus eventBus, ServiceRegistry serviceRegistry)
         {
             this.mediator = mediator;
             this.eventBus = eventBus;
@@ -85,8 +86,8 @@ namespace ServiceKeeper.Core
             }
             else
             {
-                if (untriggerTask.ContainsKey(task.Id)) DeleteUntraggerTask(task.Detail);
-                untriggerTask.Add(task.Id, task.Detail);
+                if (untriggerTask.ContainsKey(task.Id)) DeleteUntraggerTask(task);
+                untriggerTask.Add(task.Id, task);
             }
         }
 
@@ -99,7 +100,7 @@ namespace ServiceKeeper.Core
                 lastTimes.Remove(task.Id);
                 RegisteredTaskCount--;
             }
-            DeleteUntraggerTask(task.Detail);
+            DeleteUntraggerTask(task);
         }
         public static void ClearTask()
         {
@@ -109,22 +110,22 @@ namespace ServiceKeeper.Core
             lastTimes.Clear();
             untriggerTask.Clear();
         }
-        private void DeleteUntraggerTask(TaskDetail task)
+        private void DeleteUntraggerTask(TaskEntity task)
         {
-            if (task.NextSuccessTask.HasValue && untriggerTask.ContainsKey(task.NextSuccessTask.Value))
+            if (task.Detail.NextSuccessTask.HasValue && untriggerTask.ContainsKey(task.Detail.NextSuccessTask.Value))
             {
-                DeleteUntraggerTask(untriggerTask[task.NextSuccessTask.Value]);
-                untriggerTask.Remove(task.NextSuccessTask.Value);
+                DeleteUntraggerTask(untriggerTask[task.Detail.NextSuccessTask.Value]);
+                untriggerTask.Remove(task.Detail.NextSuccessTask.Value);
             }
-            if (task.NextFailureTask.HasValue && untriggerTask.ContainsKey(task.NextFailureTask.Value))
+            if (task.Detail.NextFailureTask.HasValue && untriggerTask.ContainsKey(task.Detail.NextFailureTask.Value))
             {
-                DeleteUntraggerTask(untriggerTask[task.NextFailureTask.Value]);
-                untriggerTask.Remove(task.NextFailureTask.Value);
+                DeleteUntraggerTask(untriggerTask[task.Detail.NextFailureTask.Value]);
+                untriggerTask.Remove(task.Detail.NextFailureTask.Value);
             }
-            if (task.NextNotFoundTask.HasValue && untriggerTask.ContainsKey(task.NextNotFoundTask.Value))
+            if (task.Detail.NextNotFoundTask.HasValue && untriggerTask.ContainsKey(task.Detail.NextNotFoundTask.Value))
             {
-                DeleteUntraggerTask(untriggerTask[task.NextNotFoundTask.Value]);
-                untriggerTask.Remove(task.NextNotFoundTask.Value);
+                DeleteUntraggerTask(untriggerTask[task.Detail.NextNotFoundTask.Value]);
+                untriggerTask.Remove(task.Detail.NextNotFoundTask.Value);
             }
         }
         /// <summary>
@@ -138,15 +139,17 @@ namespace ServiceKeeper.Core
                 {
                     if (task.Trigger!.ShouldTrigger(DateTime.Now))
                     {
-                        ServiceMetadata? data = serviceRegistry.Registry.Values.Where(m => m.AssemblyName == task.Detail.Key && m.ServiceStatus == ServiceStatus.Active).FirstOrDefault();
+                        ServiceMetadata? data = serviceRegistry.Registry.Values.Where(m => m.AssemblyName == task.PublishKey && m.ServiceStatus == ServiceStatus.Active).FirstOrDefault();
                         if (data != null)
                         {
-                            eventBus.Publish(task.Detail);
+                            Console.WriteLine($"{DateTime.Now:G} : 发送任务!");
+                            TaskDetail detail = task.Detail;
+                            eventBus.Publish(task.PublishKey, detail);
                         }
                         else
                         {
-                            Console.WriteLine($"找不到 Key 为  {task.Detail.Key} 任务处理服务!");
-                            _ = mediator.Publish(new ExceptionOccurredEvent(new Exception("报错!")));
+                            Console.WriteLine($"找不到 Key 为  {task.PublishKey} 任务处理服务!");
+                            //_ = mediator.Publish(new ExceptionOccurredEvent(new Exception("报错!")));
                         }
                     }
                 }
@@ -175,14 +178,14 @@ namespace ServiceKeeper.Core
                         if (task.Trigger!.ShouldTrigger(now))
                         {
                             lastTimes[task.Id] = now_str;
-                            ServiceMetadata? data = serviceRegistry.Registry.Values.Where(m => m.AssemblyName == task.Detail.Key && m.ServiceStatus == ServiceStatus.Active).FirstOrDefault();
+                            ServiceMetadata? data = serviceRegistry.Registry.Values.Where(m => m.AssemblyName == task.PublishKey && m.ServiceStatus == ServiceStatus.Active).FirstOrDefault();
                             if (data != null)
                             {
-                                eventBus.Publish(task.Detail);
+                                eventBus.Publish(task.PublishKey, task.Detail);
                             }
                             else
                             {
-                                Console.WriteLine($"找不到 Key 为  {task.Detail.Key} 任务处理服务!");
+                                Console.WriteLine($"找不到 Key 为  {task.PublishKey} 任务处理服务!");
                                 _ = mediator.Publish(new ExceptionOccurredEvent(new Exception("报错!")));
                             }
                         }
@@ -205,7 +208,7 @@ namespace ServiceKeeper.Core
             untriggerTask.TryGetValue(guid, out var task);
             if (task != null)
             {
-                eventBus.Publish(task);
+                eventBus.Publish(task.PublishKey, task.Detail);
                 ExcutedTaskCount++;
             }
             else NotFoundTaskCount++;

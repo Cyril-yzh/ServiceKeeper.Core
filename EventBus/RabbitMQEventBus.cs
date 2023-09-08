@@ -6,6 +6,7 @@ using ServiceKeeper.Core.Entity;
 using System.Text.Json;
 using System.Text;
 using ServiceKeeper.Core.EventBus.EventHandler;
+using System.Threading.Channels;
 
 namespace ServiceKeeper.Core.EventBus
 {
@@ -13,17 +14,15 @@ namespace ServiceKeeper.Core.EventBus
     {
         private readonly IModel _consumerChannel;
         private readonly string _exchangeName;
-        private string _queueName;
         private readonly RabbitMQConnection _persistentConnection;
         private readonly SubscriptionsManager _subsManager;
         private readonly IServiceProvider _serviceProvider;
 
-        public RabbitMQEventBus(RabbitMQConnection persistentConnection, IServiceProvider serviceProvider, string exchangeName, string queueName)
+        public RabbitMQEventBus(RabbitMQConnection persistentConnection, IServiceProvider serviceProvider, string exchangeName)
         {
             _persistentConnection = persistentConnection ?? throw new ArgumentNullException(nameof(persistentConnection));
             _subsManager = new SubscriptionsManager();
             _exchangeName = exchangeName;
-            _queueName = queueName;
             _serviceProvider = serviceProvider;
             _consumerChannel = CreateConsumerChannel();
             _subsManager.OnEventRemoved += SubsManager_OnEventRemoved;
@@ -37,16 +36,15 @@ namespace ServiceKeeper.Core.EventBus
             }
 
             using var channel = _persistentConnection.CreateModel();
-            channel.QueueUnbind(queue: _queueName, exchange: _exchangeName, routingKey: eventName);
+            channel.QueueUnbind(queue: eventName, exchange: _exchangeName, routingKey: eventName);
 
             if (_subsManager.IsEmpty)
             {
-                _queueName = string.Empty;
                 _consumerChannel.Close();
             }
         }
 
-        public void Publish(TaskDetail task)
+        public void Publish(string eventName, TaskDetail task)
         {
             if (!_persistentConnection.IsConnected)
             {
@@ -71,7 +69,27 @@ namespace ServiceKeeper.Core.EventBus
             }
             var properties = channel.CreateBasicProperties();
             properties.DeliveryMode = 2; // persistent
-            channel.BasicPublish(exchange: _exchangeName, routingKey: task.Key, mandatory: true, basicProperties: properties, body: body);
+            channel.BasicPublish(exchange: _exchangeName, routingKey: eventName, mandatory: true, basicProperties: properties, body: body);
+        }
+
+        public void Reply(string eventName, MqReply reply)
+        {
+            if (!_persistentConnection.IsConnected)
+            {
+                _persistentConnection.TryConnect();
+            }
+            using var channel = _persistentConnection.CreateModel();
+            channel.ExchangeDeclare(exchange: _exchangeName, type: "direct");
+            byte[] body;
+            JsonSerializerOptions options = new()
+            {
+                WriteIndented = true
+            };
+            body = JsonSerializer.SerializeToUtf8Bytes(reply, reply.GetType(), options);
+
+            var properties = channel.CreateBasicProperties();
+            properties.DeliveryMode = 2; // persistent
+            channel.BasicPublish(exchange: _exchangeName, routingKey: eventName, mandatory: true, basicProperties: properties, body: body);
         }
 
         public void Subscribe(string eventName, Type handlerType)
@@ -79,7 +97,7 @@ namespace ServiceKeeper.Core.EventBus
             CheckHandlerType(handlerType);
             DoInternalSubscription(eventName);
             _subsManager.AddSubscription(eventName, handlerType);
-            StartBasicConsume();
+            StartBasicConsume(eventName);
         }
 
         private void DoInternalSubscription(string eventName)
@@ -91,7 +109,8 @@ namespace ServiceKeeper.Core.EventBus
                 {
                     _persistentConnection.TryConnect();
                 }
-                _consumerChannel.QueueBind(queue: _queueName, exchange: _exchangeName, routingKey: eventName);
+                _consumerChannel.QueueDeclare(queue: eventName, durable: true, exclusive: false, autoDelete: false, arguments: null);
+                _consumerChannel.QueueBind(queue: eventName, exchange: _exchangeName, routingKey: eventName);
             }
         }
 
@@ -117,13 +136,13 @@ namespace ServiceKeeper.Core.EventBus
             //serviceScope.Dispose();
         }
 
-        private void StartBasicConsume()
+        private void StartBasicConsume(string eventName)
         {
             if (_consumerChannel != null)
             {
                 var consumer = new AsyncEventingBasicConsumer(_consumerChannel);
                 consumer.Received += Consumer_Received;
-                _consumerChannel.BasicConsume(queue: _queueName, autoAck: false, consumer: consumer);
+                _consumerChannel.BasicConsume(queue: eventName, autoAck: false, consumer: consumer);
             }
         }
 
@@ -132,6 +151,7 @@ namespace ServiceKeeper.Core.EventBus
         {
             var eventName = eventArgs.RoutingKey;//这个框架中，就是用eventName当RoutingKey
             var body = Encoding.UTF8.GetString(eventArgs.Body.Span);//框架要求所有的消息都是字符串的json
+            Console.WriteLine($"{DateTime.Now:G} : 接收到任务!");
 
             try
             {
@@ -149,6 +169,7 @@ namespace ServiceKeeper.Core.EventBus
                         _consumerChannel.BasicAck(eventArgs.DeliveryTag, multiple: false);
                     }
                 }
+                else throw new ApplicationException($"无法处理{eventName}类型的消息");
             }
             catch (Exception ex)
             {
@@ -169,7 +190,6 @@ namespace ServiceKeeper.Core.EventBus
             var channel = _persistentConnection.CreateModel();
             channel.ExchangeDeclare(exchange: _exchangeName, type: "direct");
 
-            channel.QueueDeclare(queue: _queueName, durable: true, exclusive: false, autoDelete: false, arguments: null);
 
             channel.CallbackException += (sender, ea) =>
             {
@@ -178,5 +198,7 @@ namespace ServiceKeeper.Core.EventBus
 
             return channel;
         }
+
+
     }
 }

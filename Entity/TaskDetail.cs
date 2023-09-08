@@ -6,20 +6,10 @@
     /// </summary>
     public class TaskDetail
     {
-        //public TaskDetail() { }
-        //public TaskDetail(string key, string task)
-        //{
-        //    Key = key;
-        //    Task = task;
-        //}
-        /// <summary>
-        /// 发送至处理服务的Key
-        /// </summary>
-        public string Key { get; init; } = "";
         /// <summary>
         /// 具体的task内容
         /// </summary>
-        public string Task { get; init; } = "";
+        public string Task { get; init; } = null!;
         /// <summary>
         /// 执行成功后的下一个消息
         /// </summary>

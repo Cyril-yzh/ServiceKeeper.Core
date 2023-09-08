@@ -64,19 +64,27 @@ namespace ServiceKeeper.Core
                         if (CurrentOptions.ServiceStatus == ServiceStatus.Active)
                         {
                             // 成为主服务时更新服务状态:如果有 Key 则更新超时时间,如果没有则降级为候选
-                            if (!await redis.GetDatabase(DbNumber).KeyExpireAsync(CurrentOptions.ElectionKey, CurrentOptions.ExpiryTime)) CurrentOptions.ServiceStatus = ServiceStatus.Standby;
+                            if (!await redis.GetDatabase(DbNumber).KeyExpireAsync(CurrentOptions.ElectionKey, CurrentOptions.ExpiryTime))
+                                CurrentOptions.ServiceStatus = ServiceStatus.Standby;
                         }
                         else
                         {
                             // 成为候选服务时检查主服务状态
                             var db = redis.GetDatabase(DbNumber);
-                            string? lockedValue = await db.StringGetAsync(CurrentOptions.ElectionKey);
-                            if (lockedValue == null) // 如果没有主服务,则开始竞选
+                            //string? lockedValue = await db.StringGetAsync(CurrentOptions.ElectionKey);
+                            //if (lockedValue == null) // 如果没有主服务,则开始竞选
+                            //{
+                            // 尝试获取互斥锁,获取到则竞选成功
+                            if (await db.StringSetAsync(CurrentOptions.ElectionKey, CurrentOptions.HostName, CurrentOptions.ExpiryTime, When.NotExists))
                             {
-                                // 尝试获取互斥锁,获取到则竞选成功
-                                if (await db.StringSetAsync(CurrentOptions.ElectionKey, CurrentOptions.HostName, CurrentOptions.ExpiryTime, When.NotExists)) CurrentOptions.ServiceStatus = ServiceStatus.Active;
-                                else CurrentOptions.ServiceStatus = ServiceStatus.Standby;
+                                CurrentOptions.ServiceStatus = ServiceStatus.Active;
                             }
+                            else
+                            {
+                                CurrentOptions.ServiceStatus = ServiceStatus.Standby;
+                            }
+
+                            //}
                         }
                     }
                     else
@@ -108,8 +116,8 @@ namespace ServiceKeeper.Core
                 {
                     if (redis.IsConnected)
                     {
-                        if (!redis.GetDatabase(DbNumber).KeyExpire(CurrentOptions.RedisKey, CurrentOptions.ExpiryTime))// 保持 Service 键的存活时间
-                            await redis.GetDatabase(DbNumber).StringSetAsync(CurrentOptions.RedisKey, JsonSerializer.Serialize(CurrentOptions), CurrentOptions.ExpiryTime);
+                        //if (!redis.GetDatabase(DbNumber).KeyExpire(CurrentOptions.RedisKey, CurrentOptions.ExpiryTime))// 保持 Service 键的存活时间
+                        await redis.GetDatabase(DbNumber).StringSetAsync(CurrentOptions.RedisKey, JsonSerializer.Serialize(CurrentOptions), CurrentOptions.ExpiryTime);
                     }
                     else
                     {
@@ -167,7 +175,7 @@ namespace ServiceKeeper.Core
                     while (await keys.MoveNextAsync())
                     {
                         var value = await db.StringGetAsync(keys.Current);
-                        ServiceMetadata? options =JsonSerializer.Deserialize<ServiceMetadata>(value.ToString());
+                        ServiceMetadata? options = JsonSerializer.Deserialize<ServiceMetadata>(value.ToString());
                         if (options != null) Registry.Add(keys.Current.ToString(), options);
                     }
                     _ = mediator.Publish(new RegistryUpdatedEvent());

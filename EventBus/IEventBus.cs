@@ -4,7 +4,9 @@ namespace ServiceKeeper.Core.EventBus
 {
     public interface IEventBus
     {
-        void Publish(TaskDetail taskEntity);
+        void Publish(string eventName, TaskDetail taskEntity);
+
+        internal void Reply(string eventName, MqReply reply);
 
         void Subscribe(string eventName, Type handlerType);
 

@@ -13,7 +13,7 @@ namespace ServiceKeeper.Core.DependencyInjection
         {
             UseEventBus(appBuilder);
             var serviceRegistry = appBuilder.ApplicationServices.GetRequiredService<ServiceRegistry>();
-            _ = appBuilder.ApplicationServices.GetRequiredService<ServiceTaskScheduler>();
+            _ = appBuilder.ApplicationServices.GetRequiredService<ServiceScheduler>();
             ProducerReceiveReplyEventHandler producerReceiverEventHandler = appBuilder.ApplicationServices.GetService<ProducerReceiveReplyEventHandler>() ?? throw new Exception("未注册 ProducerReceiveReplyEventHandler ,无法完成 EventBus 注册");
             producerReceiverEventHandler.SetEventName(serviceRegistry.CurrentOptions.AssemblyName);
             return appBuilder;

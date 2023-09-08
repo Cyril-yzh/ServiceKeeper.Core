@@ -19,10 +19,6 @@
         /// </summary>
         public string? MQPassword { get; set; }
         /// <summary>
-        /// MQ队列名
-        /// </summary>
-        public string MQQueueName { get; set; } = "";
-        /// <summary>
         /// 服务说明
         /// </summary>
         public string ServiceDescription { get; set; } = "";
