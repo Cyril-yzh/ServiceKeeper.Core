@@ -4,6 +4,7 @@ using MediatR;
 using ServiceKeeper.Core.Entity;
 using ServiceKeeper.Core.MediatREventHandlers;
 using System.Data;
+using System.Threading.Tasks;
 
 namespace ServiceKeeper.Core
 {
@@ -14,11 +15,13 @@ namespace ServiceKeeper.Core
     public class ServiceScheduler
     {
         //保存的计时器
-        static readonly Dictionary<Guid, Timer> timers = new();
+        static readonly Dictionary<Guid, Timer> taskTimers = new();
+        //保存的触发时间
         static readonly Dictionary<Guid, string> lastTimes = new();
+        //保存的任务
+        static readonly List<TaskEntity> taskEntities = new();
         //所有不需要计时器的派生任务
         static readonly Dictionary<Guid, TaskEntity> untriggerTask = new();
-
         private readonly IMediator mediator;
         private readonly IEventBus eventBus;
         private readonly ServiceRegistry serviceRegistry;
@@ -73,15 +76,15 @@ namespace ServiceKeeper.Core
         {
             if (task.IsFirstNode)
             {
-                if (timers.ContainsKey(task.Id)) DeleteTask(task);
+                if (taskTimers.ContainsKey(task.Id)) DeleteTask(task);
                 Timer timer = task.Trigger!.TriggerType switch
                 {
                     TaskTriggerType.SpecificTime => PublishTaskTimeSpecific(task),
                     TaskTriggerType.TimeInterval => PublishTaskByTimeInterval(task),
                     _ => throw new Exception()
                 };
-
-                timers.Add(task.Id, timer);
+                taskEntities.Add(task);
+                taskTimers.Add(task.Id, timer);
                 RegisteredTaskCount++;
             }
             else
@@ -93,10 +96,11 @@ namespace ServiceKeeper.Core
 
         public void DeleteTask(TaskEntity task)
         {
-            if (timers.ContainsKey(task.Id))
+            if (taskTimers.ContainsKey(task.Id))
             {
-                timers[task.Id]?.Dispose();
-                timers.Remove(task.Id);
+                taskEntities.Remove(task);
+                taskTimers[task.Id]?.Dispose();
+                taskTimers.Remove(task.Id);
                 lastTimes.Remove(task.Id);
                 RegisteredTaskCount--;
             }
@@ -104,9 +108,10 @@ namespace ServiceKeeper.Core
         }
         public static void ClearTask()
         {
-            foreach (var timerEntry in timers)
+            foreach (var timerEntry in taskTimers)
                 timerEntry.Value.Dispose();
-            timers.Clear();
+            taskEntities.Clear();
+            taskTimers.Clear();
             lastTimes.Clear();
             untriggerTask.Clear();
         }
