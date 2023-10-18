@@ -2,11 +2,11 @@
 using RabbitMQ.Client.Events;
 using Microsoft.Extensions.DependencyInjection;
 using System.Diagnostics;
-using ServiceKeeper.Core.Entity;
 using System.Text.Json;
 using System.Text;
 using ServiceKeeper.Core.EventBus.EventHandler;
 using System.Threading.Channels;
+using ServiceKeeper.Core;
 
 namespace ServiceKeeper.Core.EventBus
 {
@@ -53,26 +53,25 @@ namespace ServiceKeeper.Core.EventBus
             //Connection 可以创建多个 Channel ，Channel 不是线程安全的不能在线程间共享。
             using var channel = _persistentConnection.CreateModel();
             channel.ExchangeDeclare(exchange: _exchangeName, type: "direct");
-
             byte[] body;
-            if (task.Task == null)
+            //if (task.Task == null)
+            //{
+            //    body = Array.Empty<byte>();
+            //}
+            //else
+            //{
+            JsonSerializerOptions options = new()
             {
-                body = Array.Empty<byte>();
-            }
-            else
-            {
-                JsonSerializerOptions options = new()
-                {
-                    WriteIndented = true
-                };
-                body = JsonSerializer.SerializeToUtf8Bytes(task, task.GetType(), options);
-            }
+                WriteIndented = true
+            };
+            body = JsonSerializer.SerializeToUtf8Bytes(task, options);
+            //}
             var properties = channel.CreateBasicProperties();
             properties.DeliveryMode = 2; // persistent
             channel.BasicPublish(exchange: _exchangeName, routingKey: eventName, mandatory: true, basicProperties: properties, body: body);
         }
 
-        public void Reply(string eventName, MqReply reply)
+        public void Reply(string eventName, MQResponse reply)
         {
             if (!_persistentConnection.IsConnected)
             {
@@ -85,7 +84,7 @@ namespace ServiceKeeper.Core.EventBus
             {
                 WriteIndented = true
             };
-            body = JsonSerializer.SerializeToUtf8Bytes(reply, reply.GetType(), options);
+            body = JsonSerializer.SerializeToUtf8Bytes(reply, options);
 
             var properties = channel.CreateBasicProperties();
             properties.DeliveryMode = 2; // persistent
@@ -151,7 +150,7 @@ namespace ServiceKeeper.Core.EventBus
         {
             var eventName = eventArgs.RoutingKey;//这个框架中，就是用eventName当RoutingKey
             var body = Encoding.UTF8.GetString(eventArgs.Body.Span);//框架要求所有的消息都是字符串的json
-            Console.WriteLine($"{DateTime.Now:G} : 接收到任务!");
+            //Console.WriteLine($"{DateTime.Now:G} : 接收到任务!");
 
             try
             {
@@ -171,11 +170,11 @@ namespace ServiceKeeper.Core.EventBus
                 }
                 else throw new ApplicationException($"无法处理{eventName}类型的消息");
             }
-            catch (Exception ex)
+            catch
             {
                 //requeue：表示如何处理这条消息，如果值为true，则重新放入RabbitMQ的发送队列，如果值为false，则通知RabbitMQ销毁这条消息
                 _consumerChannel.BasicReject(eventArgs.DeliveryTag, false);
-                Debug.Fail(ex.ToString());
+                //Debug.Fail(ex.ToString());
             }
 
         }

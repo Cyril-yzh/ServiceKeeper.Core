@@ -1,9 +1,9 @@
 ﻿using ServiceKeeper.Core.EventBus;
-using ServiceKeeper.Core.Entity;
-using ServiceKeeper.Core.PendingHandlerMediatREvents;
+using ServiceKeeper.Core.MediatR;
 using ServiceKeeper.Core.EventBus.EventHandler;
 using MediatR;
 using System.Text.Json;
+using ServiceKeeper.Core;
 
 namespace ServiceKeeper.Core.MQEventHandlers
 {
@@ -27,39 +27,34 @@ namespace ServiceKeeper.Core.MQEventHandlers
             {
                 if (eventData != null)
                 {
-                    bool state = await _mediator.Send(new TaskReceivedEvent(eventData.Task)); //发给处理端处理并返回结果
-                    SendReply(errorCode: state ? ErrorCode.Success : ErrorCode.Failure, null, nextTaskId: state ? eventData.NextSuccessTask : eventData.NextFailureTask);
+                    EventResult eventResult = await _mediator.Send(new TaskReceivedEvent(eventData.Task)); //发给处理端处理并返回结果
+                    Response(eventData.Name, eventResult, eventData.Id);
                 }
                 else
                 {
-                    await Console.Out.WriteLineAsync($"序列化类型 '{typeof(TaskDetail)}' 失败或为空");
-                    SendReply(ErrorCode.ParseError, $"序列化类型 '{typeof(TaskDetail)}' 失败或为空", null);
+                    EventResult eventResult = new(Code.ParseError, $"'{eventName}'序列化类型 '{typeof(TaskDetail)}' 失败或为空");
+                    Response(null, eventResult, eventData!.Id);
                 }
                 await Task.CompletedTask;
             }
             catch (Exception ex)
             {
-                await Console.Out.WriteLineAsync($"'{eventName}'处理任务时发生错误:{ex.Message}");
-                SendReply(ErrorCode.Failure, $"'{eventName}'处理任务时发生错误:{ex.Message}", null);
+                EventResult eventResult = new(Code.Failure, $"'{eventName}'处理任务时发生错误:{ex.Message}");
+                Response(null, eventResult, eventData!.Id);
             }
         }
 
         /// <summary>
         /// 向生产者回复处理情况
         /// </summary>
-        /// <param name="nextTaskId">是否有下一个任务</param>
-        private void SendReply(ErrorCode errorCode, string? errorMsg, Guid? nextTaskId)
+        private void Response(string? taskName, EventResult eventResult, Guid? nextId)
         {
             ServiceMetadata? producer = _registry.Registry.Values.Where(m => m.ServiceRole == ServiceRole.Producer && m.ServiceStatus == ServiceStatus.Active).FirstOrDefault();
 
             if (producer != null)
             {
-                MqReply reply = new()
-                {
-                    ErrorCode = errorCode,
-                    ErrorMessage = errorMsg,
-                    NextTask = nextTaskId,
-                };
+                MQResponse reply = new(taskName, nextId, eventResult);
+
                 _eventBus.Reply(producer.AssemblyName, reply);
             }
         }

@@ -1,6 +1,6 @@
 ﻿namespace ServiceKeeper.Core
 {
-    public class ServiceOptions
+    public class ServiceKeeperOptions
     {
         /// <summary>
         /// MQ所处主机名
@@ -23,12 +23,12 @@
         /// </summary>
         public string ServiceDescription { get; set; } = "";
         /// <summary>
-        /// 服务超时时间
-        /// </summary>
-        public int ExpirySeconds { get; set; } = 30;
-        /// <summary>
         /// 服务刷新时间
         /// </summary>
         public int RenewSeconds { get; set; } = 10;
+        /// <summary>
+        /// redis中选择第几个数据库用于存放服务信息
+        /// </summary>
+        public int DatabaseNumber { get; set; } = 15;
     }
 }

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ServiceKeeper.Core.Entity
+namespace ServiceKeeper.Core
 {
     /// <summary>
     /// 任务触发的类型

@@ -5,8 +5,9 @@ using System.Text;
 using System.Threading.Tasks;
 using MediatR;
 using StackExchange.Redis;
-using ServiceKeeper.Core.PendingHandlerMediatREvents;
+using ServiceKeeper.Core.MediatR;
 using System.Text.Json;
+using ServiceKeeper.Core;
 
 namespace ServiceKeeper.Core
 {
@@ -28,7 +29,6 @@ namespace ServiceKeeper.Core
         private readonly Timer ElectionTimer = null!;
         private readonly Timer RegisterTimer = null!;
         private readonly Timer RegistryTimer = null!;
-        //private readonly object _timerLock = new object();
 
         internal ServiceRegistry(/*IHostApplicationLifetime lifetime,*/IConnectionMultiplexer redis, ServiceMetadata options, IMediator mediator, int databaseNumber = 15)
         {
@@ -37,12 +37,13 @@ namespace ServiceKeeper.Core
             if (!redis.IsConnected) return;
             this.CurrentOptions = options;
             this.mediator = mediator;
-            //var db = redis.GetDatabase(DbNumber);
-            //var value = db.StringGet(CurrentOptions.RedisKey);
-            //if (value.HasValue)
-            //{
-            //    throw new RegistryException($"已注册了相同key:{CurrentOptions.RedisKey} 的对象,检查是否在同一个服务器下存在相同的服务");
-            //}
+            var db = redis.GetDatabase(DbNumber);
+            var value = db.StringGet(CurrentOptions.RedisKey);
+            if (value.HasValue)
+            {
+                _ = mediator.Publish(new ServiceKeeperLog(LogLevel.Error, $"已注册了相同key:{CurrentOptions.RedisKey} 的服务,检查是否在同一个服务器下试图启动两个相同的服务"));
+                throw new Exception($"已注册了相同key:{CurrentOptions.RedisKey} 的服务,检查是否在同一个服务器下试图启动两个相同的服务");
+            }
             ElectionTimer = ElectionKeeperAsync();
             RegisterTimer = RegisterKeeperAsync();
             RegistryTimer = UpdateRegistryAsync();
@@ -71,10 +72,7 @@ namespace ServiceKeeper.Core
                         {
                             // 成为候选服务时检查主服务状态
                             var db = redis.GetDatabase(DbNumber);
-                            //string? lockedValue = await db.StringGetAsync(CurrentOptions.ElectionKey);
-                            //if (lockedValue == null) // 如果没有主服务,则开始竞选
-                            //{
-                            // 尝试获取互斥锁,获取到则竞选成功
+
                             if (await db.StringSetAsync(CurrentOptions.ElectionKey, CurrentOptions.HostName, CurrentOptions.ExpiryTime, When.NotExists))
                             {
                                 CurrentOptions.ServiceStatus = ServiceStatus.Active;
@@ -83,25 +81,21 @@ namespace ServiceKeeper.Core
                             {
                                 CurrentOptions.ServiceStatus = ServiceStatus.Standby;
                             }
-
-                            //}
                         }
                     }
                     else
                     {
-                        Console.WriteLine($"redis断开!");
+                        _ = mediator.Publish(new ServiceKeeperLog(  LogLevel.Fatal, $"{CurrentOptions.ElectionKey}-服务与redis断开"));
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"主服务时更新服务状态报错: {ex.Message}");
-                    //mediator.Publish(new ExceptionOccurredEvent(ex));
+                    _ = mediator.Publish(new ServiceKeeperLog(LogLevel.Fatal, $"{CurrentOptions.ElectionKey}-更新服务竞选状态报错: {ex.Message}"));
                     CurrentOptions.ServiceStatus = ServiceStatus.Standby;
                 }
             }, null, CurrentOptions.RenewTime, CurrentOptions.RenewTime);
             return result;
         }
-
 
         /// <summary>
         /// 服务注册
@@ -121,22 +115,23 @@ namespace ServiceKeeper.Core
                     }
                     else
                     {
+                        _ = mediator.Publish(new ServiceKeeperLog(LogLevel.Fatal, $"{CurrentOptions.ElectionKey}-服务与redis断开"));
                         await Task.Delay(CurrentOptions.RenewTime);
                     }
                 }
-                catch (RegistryException)
-                {
-                    throw;
-                }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"更新超时时间报错: {ex.Message}");
-                    //_ = mediator.Publish(new ExceptionOccurredEvent(ex));
+                    //Console.WriteLine($"更新超时时间报错: {ex.Message}");
+                    _ = mediator.Publish(new ServiceKeeperLog(LogLevel.Fatal, $"{CurrentOptions.ElectionKey}-更新服务注册状态报错: {ex.Message}"));
                 }
             }, null, CurrentOptions.RenewTime, CurrentOptions.RenewTime);
             return result;
         }
 
+        /// <summary>
+        /// 从redis获取所有服务注册信息
+        /// </summary>
+        /// <returns></returns>
         public Timer UpdateRegistryAsync()
         {
             Timer result = new(async (state) =>
@@ -164,11 +159,11 @@ namespace ServiceKeeper.Core
                         Registry.Remove(removedKey);
                         isUpdated = true;
                     }
-                    if (isUpdated) _ = mediator.Publish(new RegistryUpdatedEvent());
+                    if (isUpdated) _ = mediator.Publish(new ServiceRegistryUpdatedEvent());
                 }
                 catch (Exception ex)// 处理异常，清空registry重载
                 {
-                    Console.WriteLine($"获取Redis中注册的所有服务报错: {ex.Message}");
+                    _ = mediator.Publish(new ServiceKeeperLog(LogLevel.Error, $"{CurrentOptions.ElectionKey}-获取Redis中注册的所有服务报错: {ex.Message}"));
                     registry.Clear();
                     var db = redis.GetDatabase(DbNumber);
                     var keys = db.Multiplexer.GetServer(redis.GetEndPoints().First()).KeysAsync(DbNumber, $"RegistryService.*").GetAsyncEnumerator();
@@ -176,9 +171,9 @@ namespace ServiceKeeper.Core
                     {
                         var value = await db.StringGetAsync(keys.Current);
                         ServiceMetadata? options = JsonSerializer.Deserialize<ServiceMetadata>(value.ToString());
-                        if (options != null) Registry.Add(keys.Current.ToString(), options);
+                        if (options != null) Registry[keys.Current.ToString()] = options;
                     }
-                    _ = mediator.Publish(new RegistryUpdatedEvent());
+                    _ = mediator.Publish(new ServiceRegistryUpdatedEvent());
                 }
             }, null, CurrentOptions.ExpiryTime, CurrentOptions.ExpiryTime);
             return result;
@@ -231,9 +226,5 @@ namespace ServiceKeeper.Core
 
             GC.SuppressFinalize(this);
         }
-    }
-    internal class RegistryException : Exception
-    {
-        public RegistryException(string message) : base(message) { }
     }
 }

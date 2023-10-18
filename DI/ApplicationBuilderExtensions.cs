@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ServiceKeeper.Core.EventBus;
 using ServiceKeeper.Core.EventBus.EventHandler;
 using ServiceKeeper.Core.MQEventHandlers;
-using ServiceKeeper.Core.PendingHandlerMediatREvents;
+using ServiceKeeper.Core.MediatR;
 
 namespace ServiceKeeper.Core.DependencyInjection
 {
@@ -14,7 +14,7 @@ namespace ServiceKeeper.Core.DependencyInjection
             UseEventBus(appBuilder);
             var serviceRegistry = appBuilder.ApplicationServices.GetRequiredService<ServiceRegistry>();
             _ = appBuilder.ApplicationServices.GetRequiredService<ServiceScheduler>();
-            ProducerReceiveReplyEventHandler producerReceiverEventHandler = appBuilder.ApplicationServices.GetService<ProducerReceiveReplyEventHandler>() ?? throw new Exception("未注册 ProducerReceiveReplyEventHandler ,无法完成 EventBus 注册");
+            ProducerReceiveResponseEventHandler producerReceiverEventHandler = appBuilder.ApplicationServices.GetService<ProducerReceiveResponseEventHandler>() ?? throw new Exception("未注册 ProducerReceiveReplyEventHandler ,无法完成 EventBus 注册");
             producerReceiverEventHandler.SetEventName(serviceRegistry.CurrentOptions.AssemblyName);
             return appBuilder;
         }

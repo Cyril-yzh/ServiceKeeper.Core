@@ -1,4 +1,5 @@
-﻿using ReflectionSerializer;
+﻿using ServiceKeeper.Core;
+using ServiceKeeper.Core.ReflectionSerializer;
 using System.Text.Json.Serialization;
 
 namespace ServiceKeeper.Core
@@ -6,7 +7,7 @@ namespace ServiceKeeper.Core
     public class ServiceMetadata
     {
         /// <summary>
-        /// 服务注册的选择,这些选项不应该在编译期后被修改
+        /// 服务注册的选择,这些选项不应该在编译期后被外部修改
         /// ServiceId 和 AssemblyName 作为双主键来保证唯一性
         /// </summary>
         public ServiceMetadata(string description, ServiceRole serviceRole, string mainAsseblyName, Type? receiverTaskType, int expirySeconds = 30, int renewSeconds = 10)

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ServiceKeeper.Core.Entity
+namespace ServiceKeeper.Core
 {
     /// <summary>
     /// 在特定的时间触发
@@ -15,7 +15,7 @@ namespace ServiceKeeper.Core.Entity
         /// <summary>
         /// 输入月份，范围为1-12, 表示在第几个月发送
         /// </summary>
-        public List<int>? MonthofYear { get; init; }
+        public List<int>? MonthofYear { get; init; } 
         /// <summary>
         /// 输入日期，范围为1-31, 表示在每月某日发送
         /// </summary>

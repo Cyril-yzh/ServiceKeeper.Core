@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 using ServiceKeeper.Core.EventBus;
+using ServiceKeeper.Core;
 using ServiceKeeper.Core.MQEventHandlers;
 using StackExchange.Redis;
 using System.Reflection;
@@ -11,6 +12,10 @@ namespace ServiceKeeper.Core.DependencyInjection
 {
     public static class ServiceCollectionExtensions
     {
+        /// <summary>
+        /// 注册ServiceKeeperCore
+        /// </summary>
+        /// <param name="mainAssembly">可选:手动指定主程序集,指定的程序集应该是你的启动首选项程序集</param>
         public static IServiceCollection AddProducerServiceKeeper(this IServiceCollection services, Assembly? mainAssembly = null)
         {
             mainAssembly = mainAssembly ??= Assembly.GetCallingAssembly();
@@ -19,7 +24,7 @@ namespace ServiceKeeper.Core.DependencyInjection
             AddMediatR(services, mainAssembly);
             AddEventBus(services);
             AddServiceRegistry(services);
-            services.AddSingleton<ProducerReceiveReplyEventHandler>();
+            services.AddSingleton<ProducerReceiveResponseEventHandler>();
             // Producer 特有的 注册任务 Scheduler
             services.AddSingleton<ServiceScheduler>(sp =>
             {
@@ -31,9 +36,12 @@ namespace ServiceKeeper.Core.DependencyInjection
 
             return services;
         }
-        ///<param name="subscriptionKey">侦听的Key</param>
-        ///<param name="description">服务功能的说明</param>
-        /// <param name="receiveTaskType">从MQ接收的任务类型</param>
+        /// <summary>
+        /// 注册ServiceKeeperCore
+        /// </summary>
+        /// <param name="receiveTaskType">指定此服务所接收的任务配置类型</param>
+        /// <param name="mainAssembly">可选:手动指定主程序集,指定的程序集应该是你的启动首选项程序集</param>
+        /// <returns></returns>
         public static IServiceCollection AddConsumerServiceKeeper(this IServiceCollection services, Type receiveTaskType, Assembly? mainAssembly = null)
         {
             mainAssembly ??= Assembly.GetCallingAssembly();
@@ -43,7 +51,6 @@ namespace ServiceKeeper.Core.DependencyInjection
             AddServiceRegistry(services);
             AddEventBus(services);
             services.AddSingleton<ConsumerReceiveTaskEventHandler>();
-            //services.AddSingleton<ITaskReceivedEventHandler, TaskReceivedEventHandler>();
             return services;
         }
 
@@ -55,8 +62,8 @@ namespace ServiceKeeper.Core.DependencyInjection
             }
             services.AddSingleton(sp =>
             {
-                ServiceOptions optionService = sp.GetRequiredService<IOptions<ServiceOptions>>().Value;
-                ServiceMetadata serviceMetadata = new(optionService.ServiceDescription, role, Assembly.GetEntryAssembly()!.GetName().Name!, receiveTaskType, optionService.ExpirySeconds, optionService.RenewSeconds);
+                ServiceKeeperOptions optionService = sp.GetRequiredService<IOptions<ServiceKeeperOptions>>().Value;
+                ServiceMetadata serviceMetadata = new(optionService.ServiceDescription, role, Assembly.GetEntryAssembly()!.GetName().Name!, receiveTaskType, optionService.RenewSeconds*3, optionService.RenewSeconds);
                 return serviceMetadata;
             });
             return services;
@@ -82,7 +89,8 @@ namespace ServiceKeeper.Core.DependencyInjection
                 IConnectionMultiplexer redisConnection = sp.GetService<IConnectionMultiplexer>() ?? throw new Exception("IConnectionMultiplexer 获取失败,请先注册 IConnectionMultiplexer");
                 ServiceMetadata serviceMetadata = sp.GetRequiredService<ServiceMetadata>();
                 IMediator mediator = sp.GetService<IMediator>() ?? throw new Exception("IMediator 获取失败,请先注册 MediatR");
-                return new ServiceRegistry(/*lifetime,*/ redisConnection, serviceMetadata, mediator);
+                ServiceKeeperOptions optionService = sp.GetRequiredService<IOptions<ServiceKeeperOptions>>().Value;
+                return new ServiceRegistry(/*lifetime,*/ redisConnection, serviceMetadata, mediator, optionService.DatabaseNumber);
             });
             return services;
         }
@@ -94,7 +102,7 @@ namespace ServiceKeeper.Core.DependencyInjection
         {
             services.AddSingleton<IEventBus>(sp =>
             {
-                var optionService = sp.GetRequiredService<IOptions<ServiceOptions>>().Value;
+                var optionService = sp.GetRequiredService<IOptions<ServiceKeeperOptions>>().Value;
                 var factory = new ConnectionFactory()
                 {
                     HostName = optionService.MQHostName,

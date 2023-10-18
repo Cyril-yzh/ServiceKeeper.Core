@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ServiceKeeper.Core.Entity
+namespace ServiceKeeper.Core
 {
     /// <summary>
     /// 每隔一段时间触发
@@ -27,7 +27,7 @@ namespace ServiceKeeper.Core.Entity
         /// <summary>
         /// 间隔秒数
         /// </summary>
-        public int IntervalSeconds { get; set; }
+        public int IntervalSeconds { get; set; } = 9999;
         /// <summary>
         /// 非触发时间范围
         /// </summary>

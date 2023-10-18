@@ -1,12 +1,11 @@
-﻿using ServiceKeeper.Core.Entity;
-
+﻿using ServiceKeeper.Core;
 namespace ServiceKeeper.Core.EventBus
 {
     public interface IEventBus
     {
         void Publish(string eventName, TaskDetail taskEntity);
 
-        internal void Reply(string eventName, MqReply reply);
+        internal void Reply(string eventName, MQResponse reply);
 
         void Subscribe(string eventName, Type handlerType);
 
